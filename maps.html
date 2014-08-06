@@ -10,8 +10,8 @@
     var key = "AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak";
     var bounds = {minX:180,minY:180,maxX:-180,maxY:-180};
     var markers = [];
-    var size = {width:2400,height:1200,window:600};
-
+    var size = {width:1000,height:800,window:300};
+	var zoom = 1;
     function loadKML(file){
         $.ajax({url:file,dataType:'xml',success:function(data){
             var document = $(data).find('Document')[0];
@@ -30,6 +30,7 @@
              updateBounds(x,y);
              markers.push({x:x,y:y});
          };
+		 bounds.minX = bounds.minX-2;
      }
 
      function updateBounds(x,y){
@@ -38,30 +39,148 @@
          bounds.maxX = Math.max(bounds.maxX,x);
          bounds.maxY = Math.max(bounds.maxY,y);
      }
-
+	
+	function getSizeWindowInKm(){
+		/* largeur (longitude) fixe en angle / distance, mais pas en latitude (longueur non conservee) */
+		/* Les angles sont conserves */
+		var lat = GeoLoc.getDistanceLat(bounds.minY,bounds.maxY) / size.height;
+		var lng = GeoLoc.getDistanceLng(bounds.minX,bounds.maxX,bounds.minY) / size.width;
+		var max = Math.max(lat,lng);
+		var angle = GeoLoc.getAngleLat(max*size.window);
+		zoom = Math.round(Math.log(360/angle) / Math.log(2)) -1;
+		// On ajuste par rapport au zoom
+		var distance = GeoLoc.getDistanceDeltaLat(360/Math.pow(2,zoom--));
+		//console.log("distance",distance,bounds.minY,bounds.maxY);
+		return distance;
+	}
+	
      function computePas(){
-         return Math.min(((bounds.maxX - bounds.minX) / size.width),((bounds.maxY - bounds.minY) / size.height));
+		 getSizeWindowInKm();
+		 var lat = GeoLoc.getDistanceLat(bounds.minY,bounds.maxY) / size.height;
+		 var lng = GeoLoc.getDistanceLng(bounds.minX,bounds.maxX,bounds.minY) / size.width;
+		 var max = Math.max(lat,lng);
+		 var widths = GeoLoc.findWidthAngle(bounds);
+         var pas = Math.max(((widths.lng) / size.width),((widths.lat) / size.height));
+		 var angle = pas * size.window;
+		 zoom = Math.round(Math.log(360/angle) / Math.log(2));
+		 var newPas = angle/size.window;
+		 console.log("Info",zoom,angle,pas,newPas);
+		 return newPas;
      }
+		// http://www.maptiler.org/google-maps-coordinates-tile-bounds-projection/
+	 var GeoLoc = {
+		degreInKm:111.195,
+		rayon:6371,
+		
+		/* Renvoie la largeur pour un zoom donne (base sur circonference terre) */
+		getWidthZoom:function(zoom){
+			return Math.PI*2*this.rayon*1000 / Math.pow(2,zoom);
+		},
+		// Position en mettre d'une lng / lat
+		getPositionFromLat:function(lat,lng){
+			// Demi circonference, considere la meme dans les deux sens
+			var circ = (this.rayon*1000*Math.PI);
+			var x = lng * circ / 180.0;
+			// Formule mercator
+			var y = Math.log( Math.tan((90 + lat) * Math.PI / 360.0 )) / (Math.PI / 180.0)
+			y = y * circ / 180.0;
+			return {x:x,y:y};
+		},
+		getLatFromPosition:function(x,y){
+			var circ = (this.rayon*1000*Math.PI);
+			var lng = (x / circ) * 180;
+			/* 
+			var t = GeoLoc.getPositionFromLat(50,8)
 
+var val = (t.y / (6371*1000))*180
+
+val = 180 / Math.PI * (2 * Math.atan( Math.exp( val * Math.PI / 180.0)) - Math.PI / 2.0)
+
+val = Math.exp(val * (Math.PI/180))
+val = Math.atan(val)*2
+val = val - Math.PI/2
+val = (180/Math.PI)*val
+
+*/
+		},
+		getBounds:function(lat,lng,zoom){
+			var coord = this.getPositionFromLat(lat,lng);
+			var pas = this.getWidthZoom(zoom);
+			var bounds = {minX:coord.x,minY:coord.y,maxX:coord.x + pas,maxY:coord.y+pas};
+			// Transform en lat/lng			
+			
+		},
+		
+		
+		findWidthAngle:function(bounds){
+			/* Cas latitude */
+			var distanceLat = this.getDistanceLat(bounds.minY,bounds.maxY);
+			
+			/* Cas longitude (depend de la latitude, hauteur) */
+			var circle = this.getCircleToLatitude((bounds.minY + bounds.maxY)/2);
+			var distanceLng = ((bounds.maxX - bounds.minX) / 360) * circle;
+			
+			return {lat:distanceLat,lng:distanceLng};
+		},
+		getAngleLat:function(distance){
+			return distance/this.degreInKm;
+		},
+		getDistanceDeltaLat:function(angle){
+			return angle*this.degreInKm;
+		},		
+		getDistanceLat:function(latMin,latMax){
+			var angleLat = latMax - latMin;
+			return angleLat*this.degreInKm;
+		},
+		getDistanceLng:function(lngMin,lngMax,lat){
+			var circle = this.getCircleToLatitude(lat);
+			return ((lngMax - lngMin)/360) * circle;			
+		},
+		getAngleLng:function(distance,lat){
+			var circle = this.getCircleToLatitude(lat);
+			return (distance/circle)*360;
+		},
+		getCircleToLatitude:function(latitude){
+			var adjustRayon = (Math.PI/2 - this.degreeToRad(latitude)) * this.rayon;
+			return adjustRayon * 2 * Math.PI;
+		},
+		degreeToRad : function(alpha){
+			return (alpha*Math.PI/180);
+		}
+	 }
+	 
     function showImage(){
+		var distance = getSizeWindowInKm();
+		//var pas = computePas() * size.window;
         // On determine le quadrillage
-        for(var i = 0 ; i < Math.ceil(size.width/size.window);i++){
-            for(var j = 0 ; j < Math.ceil(size.height/size.window);j++){
-
+		
+		var pasLng = 13.1;
+		var histoPas = [];
+		for(var j = Math.ceil(size.height/size.window)-1 ; j>=0 ;j--){
+			//var pasLng = GeoLoc.getAngleLng(distance,bounds.minY + j*pasLat);
+			var pasLat = GeoLoc.getAngleLat(distance) - j*j*.1;
+			for(var i = 0 ; i < Math.ceil(size.width/size.window)-1;i++){            				
+				var pas = pasLng;
+				
+				var bds = {minY:parseFloat((bounds.minY + j*pasLat).toFixed(3)),minX:parseFloat((bounds.minX + i*pas).toFixed(3)),
+					maxY:parseFloat((bounds.minY + (j+1)*pasLat).toFixed(3)),maxX:parseFloat((bounds.minX + (i+1)*pas).toFixed(3))};
+				var url = buildPartial(bds);
+				if(url!=null){
+					$('body').append('<img src="' + url + '" style="width:' + size.window + 'px;style:' + size.window + 'px;margin-top:-5px"/>');
+				}
             }
-
-        }
-        $('#img').attr('src',buildPartial());
+			$('body').append('<br/>');
+        }	        
     }
 
-    function buildPartial(){
+    function buildPartial(bds){
         var url = "http://maps.googleapis.com/maps/api/staticmap?size=" + size.window + "x" + size.window + "&maptype=roadmap&sensor=true&key=" + key;
-        var pas = computePas() * size.window;
-        var bds = {minY:bounds.minY ,minX:bounds.minX ,maxY:bounds.minY + pas,maxX:bounds.minX + pas};
-
-        url+="&visible=" + bds.minY + "," + bds.minX + "&visible=" + bds.maxY + "," + bds.maxX;
+        url+="&zoom=" + zoom + "&center=" + ((bds.minY +bds.maxY)/2)+ "," + ((bds.minX +bds.maxX)/2);
+        //url+="&visible=" + bds.minY + "," + bds.minX + "&visible=" + bds.maxY + "," + bds.maxX;
         url+=buildMarkers(bds);
-        console.log(url)
+        //console.log(bds.minX,bds.minY,bds.maxX,bds.maxY);
+		//console.log(bds);
+		console.log(((bds.minY +bds.maxY)/2)+ "," + ((bds.minX +bds.maxX)/2))
         return url;
     }
 
@@ -82,8 +201,6 @@ loadKML("resources/norvege.kml");
 
  </script>
 
-
-<img src="" style="width:800;height:800" id="img"/>
 
 </body>
 </html>
