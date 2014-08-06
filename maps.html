@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <script src="lib/jquery-1.11.0.min.js"></script>
+</head>
+<body>
+
+ <script>
+    var key = "AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak";
+    var bounds = {minX:180,minY:180,maxX:-180,maxY:-180};
+    var markers = [];
+    var size = {width:2400,height:1200,window:600};
+
+    function loadKML(file){
+        $.ajax({url:file,dataType:'xml',success:function(data){
+            var document = $(data).find('Document')[0];
+            loadMarkers(document);
+            showImage();
+        }});
+    }
+
+     function loadMarkers(data){
+         var points = $(data).find('Placemark > Point > coordinates');
+         for(var i = 0 ; i < points.length ; i++){
+             var point = points[i];
+             var p = point.firstChild.nodeValue.split(",");
+             var x = parseFloat(p[0]).toFixed(3);
+             var y = parseFloat(p[1]).toFixed(3);
+             updateBounds(x,y);
+             markers.push({x:x,y:y});
+         };
+     }
+
+     function updateBounds(x,y){
+         bounds.minX = Math.min(bounds.minX,x);
+         bounds.minY = Math.min(bounds.minY,y);
+         bounds.maxX = Math.max(bounds.maxX,x);
+         bounds.maxY = Math.max(bounds.maxY,y);
+     }
+
+     function computePas(){
+         return Math.min(((bounds.maxX - bounds.minX) / size.width),((bounds.maxY - bounds.minY) / size.height));
+     }
+
+    function showImage(){
+        // On determine le quadrillage
+        for(var i = 0 ; i < Math.ceil(size.width/size.window);i++){
+            for(var j = 0 ; j < Math.ceil(size.height/size.window);j++){
+
+            }
+
+        }
+        $('#img').attr('src',buildPartial());
+    }
+
+    function buildPartial(){
+        var url = "http://maps.googleapis.com/maps/api/staticmap?size=" + size.window + "x" + size.window + "&maptype=roadmap&sensor=true&key=" + key;
+        var pas = computePas() * size.window;
+        var bds = {minY:bounds.minY ,minX:bounds.minX ,maxY:bounds.minY + pas,maxX:bounds.minX + pas};
+
+        url+="&visible=" + bds.minY + "," + bds.minX + "&visible=" + bds.maxY + "," + bds.maxX;
+        url+=buildMarkers(bds);
+        console.log(url)
+        return url;
+    }
+
+    function buildMarkers(bds){
+        if(markers.length > 0){
+            var url="&markers=color:red";
+            markers.forEach(function(m){
+                if(m.y > bds.minY && m.y < bds.maxY && m.x > bds.minX && m.x < bds.maxX){
+                    url+="|" + m.y + "," + m.x;
+                }
+            });
+            return url;
+        }
+        return "";
+    }
+
+loadKML("resources/norvege.kml");
+
+ </script>
+
+
+<img src="" style="width:800;height:800" id="img"/>
+
+</body>
+</html>
