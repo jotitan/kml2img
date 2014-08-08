@@ -49,21 +49,25 @@
          var points = $(data).find('Placemark');
          for(var i = 0 ; i < points.length ; i++){
 		     var styleId = extractValue($(points[i]),'styleUrl');
+             var name = extractValue($(points[i]),'name');
              var point = extractValue($(points[i]),'Point > coordinates');
 			 if(point != null){
 				 var p = point.split(",");
-				 var x = parseFloat(p[0]).toFixed(3);
-				 var y = parseFloat(p[1]).toFixed(3);
+				 var x = parseFloat(parseFloat(p[0]).toFixed(3));
+				 var y = parseFloat(parseFloat(p[1]).toFixed(3));
 				 updateBounds(x,y);
-				 markers.push({x:x,y:y,style:styles[styleId]});
+				 markers.push({x:x,y:y,style:styles[styleId],name:name});
 			 }else{
 				var line = extractValue($(points[i]),'LineString > coordinates');
 				if(line != null){
 					var coords = line.split(" ");					
 					var pointsLine = coords.map(function(c){
-						point = {lng:parseFloat(c.split(",")[0]).toFixed(3),lat:parseFloat(c.split(",")[1]).toFixed(3)};
-						//updateBounds(point.lng,point.lat);
-						return point;
+                        //console.log(c)
+                        if(c!=null && c.length >5){
+                            var pointLine = {lng:parseFloat(parseFloat(c.split(",")[0]).toFixed(3)),lat:parseFloat(parseFloat(c.split(",")[1]).toFixed(3))};
+                            updateBounds(pointLine.lng,pointLine.lat,c);
+                            return pointLine;
+                        }
 					});
 					paths.push({pointsLine:points,style:styles[styleId]});
 					
@@ -80,15 +84,13 @@
 		}
 		return null;
 	 }
-	 
-	 function loadPath(){
-	 }
-
-     function updateBounds(x,y){
+    var i = 0;
+     function updateBounds(x,y,c){
          bounds.minX = Math.min(bounds.minX,x);
          bounds.minY = Math.min(bounds.minY,y);
          bounds.maxX = Math.max(bounds.maxX,x);
          bounds.maxY = Math.max(bounds.maxY,y);
+
      }
 	
 	
@@ -123,7 +125,7 @@
 		var lng = GeoLoc.getDistanceLng(bounds.minX,bounds.maxX,bounds.minY) / size.width;
 		var max = Math.max(lat,lng);
 		var angle = GeoLoc.getAngleLat(max*size.window);
-		zoom = Math.round(Math.log(360/angle) / Math.log(2)) -1;	
+		zoom = Math.round(Math.log(360/angle) / Math.log(2)) -2;
 	}
 	
 	 // http://www.maptiler.org/google-maps-coordinates-tile-bounds-projection/
@@ -188,16 +190,18 @@
 		// Pas d'espacement
         if(markers.length > 0){
 			var url = "";
-			var pas = (bds.maxX - bds.minX)/size.window * 10;
+            // Element distant of 10 px
+			var pas = ((bds.maxX - bds.minX)/size.window) * 10;
+            //console.log(pas)
             var drawMarks = [];
 			markers.forEach(function(m){
-                if(m.y > bds.minY && m.y < bds.maxY && m.x > bds.minX && m.x < bds.maxX){
+                if(m.y >= (bds.minY-pas) && m.y < (bds.maxY +pas) && m.x > (bds.minX -pas) && m.x < (bds.maxX + pas)){
 					var present = drawMarks.some(function(mark){
-						var lb = {minX:mark.x-pas,maxX:mark.x+pas,minY:mark.y-pas,maxY:mark.y+pas};
+                        var lb = {minX:mark.x-pas,maxX:parseFloat(mark.x+pas),minY:mark.y-pas,maxY:parseFloat(mark.y+pas)};
 						return m.x >= lb.minX && m.x <=lb.maxX && m.y >= lb.minY && m.y <= lb.maxY;
 					});
 					if(!present){
-						drawMarks.push(m);
+       				drawMarks.push(m);
 						url+="&markers=" + ((m.style == null || m.style.icon == null)?"color:red":"icon:" + m.style.icon);
 						url+="|" + m.y + "," + m.x;
 					}
@@ -220,7 +224,7 @@ google.maps.event.addListener(map, 'projection_changed', function(){
 
  </script>
 
-<div id="map" style"width:100px:height:100px;visibility:none"></div>
+<div id="map" style="width:100px:height:100px;visibility:none"></div>
 
 </body>
 </html>
