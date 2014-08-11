@@ -11,6 +11,7 @@
 
  <script>
     var key = "AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak";
+	var debug = false;
     var bounds = {minX:180,minY:180,maxX:-180,maxY:-180};
     var size = {width:1400,height:2000,window:256};
 	var realSize = $.extend({},size);
@@ -20,7 +21,7 @@
 	var zoom = 1;
 	var docInfo;
 	var canvas;
-    var logoShift = 0;
+    var logoShift = 25;
     function loadKML(file){
         $.ajax({url:file,dataType:'xml',success:function(data){
             docInfo = $(data).find('Document')[0];
@@ -30,32 +31,32 @@
         }});
     }
 
-		function loadStyles(docInfo){
-			var stylesXml = $(docInfo).find('Style');
-			for(var i = 0 ; i <stylesXml.length ; i++){
-				var style = stylesXml[i];
-				var id = "#" + style.getAttribute("id");
-				var icon = extractValue($(style),'IconStyle > Icon > href');
-				if(icon!=null){
-					styles[id] = {icon:icon};
-				}else{
-					var lineStyle = $(style).find('LineStyle');
-					if(lineStyle.length > 0){
-						var ls = $(lineStyle[0]);
-						styles[id] = {color:convertColor(extractValue(ls,'color')),width:extractValue(ls,'width')};
-					}				
-				}
+	function loadStyles(docInfo){
+		var stylesXml = $(docInfo).find('Style');
+		for(var i = 0 ; i <stylesXml.length ; i++){
+			var style = stylesXml[i];
+			var id = "#" + style.getAttribute("id");
+			var icon = extractValue($(style),'IconStyle > Icon > href');
+			if(icon!=null){
+				styles[id] = {icon:icon};
+			}else{
+				var lineStyle = $(style).find('LineStyle');
+				if(lineStyle.length > 0){
+					var ls = $(lineStyle[0]);
+					styles[id] = {color:convertColor(extractValue(ls,'color')),width:extractValue(ls,'width')};
+				}				
 			}
 		}
-		
-		var colorReg = new RegExp(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
-		/* Converti une couleur BGR en RGB */
-		function convertColor(color){
-			return color.replace(colorReg,'$4$3$2')
-		}
+	}
+	
+	var colorReg = new RegExp(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+	/* Converti une couleur BGR en RGB */
+	function convertColor(color){
+		return color.replace(colorReg,'$4$3$2')
+	}
 
     function round(value){
-        return Math.round(parseFloat(value) * 10) / 10;
+        return Math.round(parseFloat(value) * 100000) / 100000;
     }
 
      function loadInfos(data){
@@ -85,8 +86,8 @@
 					
 				}
 			 }
-         };
-		 bounds.minX = bounds.minX-2;
+         };		
+		 bounds.minX = bounds.minX-(bounds.maxX - bounds.minX)*0.1;
      }
 	 	 
 	 function extractValue(data,path){
@@ -102,13 +103,12 @@
 		}
 		return null;
 	 }
-    var i = 0;
+	 
      function updateBounds(x,y,c){
          bounds.minX = Math.min(bounds.minX,x);
          bounds.minY = Math.min(bounds.minY,y);
          bounds.maxX = Math.max(bounds.maxX,x);
          bounds.maxY = Math.max(bounds.maxY,y);
-
      }
 
     function findBounds(lat,lng,zoom){
@@ -128,6 +128,10 @@
         return {lat:deltaLat,lng:deltaLng};
 
     }
+	
+	function findZoom(){
+		
+	}
 	
 	function getSizeWindowInKm(){
 		/* largeur (longitude) fixe en angle / distance, mais pas en latitude (longueur non conservee) */
@@ -166,17 +170,25 @@
 		}
 	 }
 	 
+	function createCanvas(){
+		$('body').append('<canvas id="canvas" height="' + realSize.height + '" width="' + realSize.width + '"></canvas>');
+		canvas = document.getElementById("canvas").getContext("2d");
+	}
+	
+	var nbTotal = 0;
+	 
     function showImage(){
 		getSizeWindowInKm();
 		
 		realSize.width = Math.ceil(size.width/size.window)*size.window;
 		realSize.height = Math.ceil(size.height/size.window)*size.window;
 		
-		$('body').append('<canvas id="canvas" height="' + realSize.height + '" width="' + realSize.width + '"></canvas>');
-		canvas = document.getElementById("canvas").getContext("2d");
+		createCanvas();
+		
 		var tot = 0;
-        var nb = 0;
-		var currentPoint = {lat:bounds.maxY,lng:bounds.minX};
+    	var currentPoint = {lat:bounds.maxY,lng:bounds.minX};
+		size.maxJ = Math.ceil(size.height/size.window);
+		size.maxI = Math.ceil(size.width/size.window) -1;
 		for(var j = Math.ceil(size.height/size.window) ; j>=0 ;j--){
 			currentPoint.lng = bounds.minX;
 			var delta = findBounds(currentPoint.lat,currentPoint.lng,zoom);
@@ -186,51 +198,59 @@
 				currentPoint.lng+=delta.lng;				
 				var url = buildPartial(bds,i,j);
 				if(url!=null){
-					//console.log(i+"-"+j,url);
-                    console.log(url.length)
-                    nb++;
+                    nbTotal++;
                     tot+=url.length;
-					var debug = "";	//border:solid 1px black;
-					//$('body').append('<img src="' + url + '" style="' + debug + 'width:' + size.window + 'px;style:' + size.window + 'px;margin-top:-5px"/>');
 					addImgToCanvas(i,j,url);
 				}
             }
 			currentPoint.lat-=delta.lat;
 			$('body').append('<br/>');
         }
-        console.log("moy : " + (tot/nb));
+        console.log("moy : " + (tot/nbTotal));
     }
 
+	var nbLoaded = 0;
+	var images = [];
 		
 	function addImgToCanvas(i,j,url){
+		if(debug){
+			$('body').append('<img src="' + url + '" style="border:solid 1px black;width:' + size.window + 'px;style:' + size.window + 'px;margin-top:-5px"/>');					
+		}else{
 		var img = new Image();
-        img.src = url;
-        img.onload = function(){
-            canvas.drawImage(img, i*size.window, realSize.height - j*(size.window - logoShift), size.window, size.window);
-            canvas.dra
-        };
+			img.src = url;
+			img.onload = function(){
+				images[i+"-"+j] = img;
+				nbLoaded++;
+				if(nbLoaded == nbTotal){
+					finalDraw();
+				}
+			};
+		}
 
-
+	}
+	
+	/* Draw the map */
+	function finalDraw(){
+		for(var j = size.maxJ ; j >=0  ; j--){
+			for(var i = 0 ; i <= size.maxI ; i++){
+				canvas.drawImage(images[i+"-"+j], i*size.window, realSize.height - j*(size.window - logoShift), size.window, size.window);
+			}
+		}	
 	}
 	
     function buildPartial(bds,i,j){
         var url = "http://maps.googleapis.com/maps/api/staticmap?size=" + size.window + "x" + size.window + "&maptype=roadmap&sensor=true&key=" + key;
         url+="&zoom=" + zoom + "&center=" + ((bds.minY +bds.maxY)/2)+ "," + ((bds.minX +bds.maxX)/2);
-        //url+="&visible=" + bds.minY + "," + bds.minX + "&visible=" + bds.maxY + "," + bds.maxX;
         url+=buildMarkers(bds);
 		url+=buildLines(bds,i,j);
-        //console.log(bds);
-		//console.log(((bds.minY +bds.maxY)/2)+ "," + ((bds.minX +bds.maxX)/2))
         return url;
     }
 
     function buildMarkers(bds){
-		// Pas d'espacement
-        if(markers.length > 0){
+		if(markers.length > 0){
 			var url = "";
             // Element distant of 10 px
 			var pas = ((bds.maxX - bds.minX)/size.window) * 10;
-            //console.log(pas)
             var drawMarks = [];
 			markers.forEach(function(m){
                 if(m.y >= (bds.minY-pas) && m.y < (bds.maxY +pas) && m.x > (bds.minX -pas) && m.x < (bds.maxX + pas)){
@@ -252,37 +272,41 @@
 
 	function buildLines(bds,i,j){
 		var url = "";
-		var ii=0;
 		if(paths.length > 0){
-			var pas = ((bds.maxX - bds.minX)/size.window) * 30;
+			var pas = ((bds.maxX - bds.minX)/size.window) * 20;
 			paths.forEach(function(path){
-				var key = i+":"+j+":"+path.name;
-				//console.log(key,bds);
 				var pointsToDraw = [];
 				var lastPoint = null;
 				var lastHiddenPoint;
 				path.points.forEach(function(p){
-					// On verifie si un point n'est pas trop proche
+					if(p == null){return;}
+					// Verify if point is enough distant
 					if(p!=null && p.lat >= (bds.minY-pas) && p.lat < (bds.maxY +pas) && p.lng > (bds.minX -pas) && p.lng < (bds.maxX + pas)){
+						//console.log("IN",p);
 						if(lastPoint == null || 
 							( Math.sqrt(Math.pow(lastPoint.lng - p.lng,2) + Math.pow(lastPoint.lat - p.lat,2)) > pas)){								
-								pointsToDraw.push(p);
 								if(lastHiddenPoint!=null){
 									pointsToDraw.push(lastHiddenPoint);
 								}
+								pointsToDraw.push(p);
 								lastPoint = p;
 						}
 						lastHiddenPoint = null;
-					}else{
-						if(lastHiddenPoint ==null){
-							lastHiddenPoint = lastPoint;
-						}
-						if(lastHiddenPoint == null){
+					}else{	
+						//console.log("OUT",p);
+						if(lastHiddenPoint == null && lastPoint == null){
 							lastHiddenPoint = p;
 						}else{
-							if(p!=null && droiteIsInPlan({x:lastHiddenPoint.lng,y:lastHiddenPoint.lat},{x:p.lng,y:p.lat},bds)){								
+							var tempPoint = lastHiddenPoint || lastPoint;
+							if(p!=null && droiteIsInPlan({x:tempPoint.lng,y:tempPoint.lat},{x:p.lng,y:p.lat},bds)){								
+								// Si traverse image, on affiche les deux points, sinon, sortie de trait, on affiche pas le point
+								// (deja ecrit)
+								if(lastHiddenPoint!=null){
+									pointsToDraw.push(tempPoint);
+								}
 								pointsToDraw.push(p);
-								pointsToDraw.push(lastHiddenPoint);
+								lastHiddenPoint = p;
+								lastPoint = null;
 							}else{
 								lastHiddenPoint = p;
 							}
@@ -295,7 +319,6 @@
 					pointsToDraw.forEach(function(p){
 						url+="|" + p.lat + "," + p.lng;
 					});
-					//console.log(i,j,path.name,pointsToDraw,url);
 				}
 			});
 		}
@@ -340,18 +363,16 @@
 		return false;
 	}
 	
-var map;
-$(function(){
-map = new google.maps.Map($('#map').get(0),{zoom:8,center:new google.maps.LatLng(0,0)});
-google.maps.event.addListener(map, 'projection_changed', function(){
-	loadKML("resources/norvege.kml");
-});
-
-});
+	var map;
+	$(function(){
+		map = new google.maps.Map($('#map').get(0),{zoom:8,center:new google.maps.LatLng(0,0)});
+		google.maps.event.addListener(map, 'projection_changed', function(){
+			//loadKML("resources/norvege.kml");
+			loadKML("resources/export.kml");
+		});
+	});
 
  </script>
-
- <!--canvas id="canvas" height="1024" width="1024"></canvas-->
  
 <div id="map" style="width:100px:height:100px;visibility:none"></div>
 

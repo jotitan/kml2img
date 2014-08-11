@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<kml xmlns="http://earth.google.com/kml/2.0">
+<Document>
+  <name>--Noisiel--Test KML</name>
+  <Style id="roadStyle">
+    <LineStyle>
+      <color>9F0000FF</color>
+      <width>4</width>
+    </LineStyle>
+
+  </Style> <Placemark>
+   	<name>Test KML</name>
+    <description><![CDATA[Distance: 5.533&nbsp;<br/>www.openrunner.com/index.php?id=3958389]]>
+    </description>
+   <LookAt>
+      <longitude>2.63768</longitude>
+      <latitude>48.86268</latitude>
+    </LookAt>
+    <Point>
+      <coordinates>2.63768,48.86268,0</coordinates>
+    </Point>
+  </Placemark>
+  <Placemark>
+   <name>route</name>
+    <styleUrl>#roadStyle</styleUrl>
+   <MultiGeometry>
+      <LineString>
+        <coordinates>2.63768,48.86268,0 2.637,48.86344,0 2.63283,48.86398,0 2.60734,48.86728,0 2.60696,48.86706,0 2.60627,48.86584,0 2.60687,48.86565,0 2.60816,48.86511,0 2.60945,48.86455,0 2.60992,48.86423,0 2.60996,48.86375,0 2.61099,48.86339,0 2.61215,48.86296,0 2.61369,48.86246,0 2.61507,48.86192,0 2.61623,48.86152,0 2.61747,48.86085,0 2.61786,48.86,0 2.61854,48.85932,0 2.62125,48.85904,0 2.62223,48.85929,0 2.62296,48.85921,0 2.62442,48.85927,0 2.62451,48.85873,0 2.62884,48.85862,0 2.63386,48.85856,0 2.63477,48.85904,0 2.6358,48.85893,0 2.63687,48.85935,0 2.63738,48.86014,0 2.63781,48.86141,0 2.63721,48.86175,0 2.63754,48.86264,0 </coordinates>
+      </LineString>
+    </MultiGeometry>
+  </Placemark>
+</Document>
+</kml>
