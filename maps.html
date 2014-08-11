@@ -4,62 +4,71 @@
     <title></title>
     <script src="lib/jquery-1.11.0.min.js"></script>
     <script type="text/javascript"
-            src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak">
+            src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak&libraries=geometry">
     </script>
 </head>
 <body>
 
  <script>
-    var key = "AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak";
 	var debug = false;
+    var key = "AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak";
+	var ROOT_URL = "http://maps.googleapis.com/maps/api/staticmap?key=" + key;
     var bounds = {minX:180,minY:180,maxX:-180,maxY:-180};
     var size = {width:1400,height:2000,window:256};
 	var realSize = $.extend({},size);
-    var markers = [];
-	var styles = [];
-	var paths = [];
-	var zoom = 1;
-	var docInfo;
-	var canvas;
-    var logoShift = 25;
+    var logoShift = 25;	// To avoid google logo display
+	var fixBounds = {minX:12.5,maxX:15.5,minY:66.7,maxY:69.3};
+	
     function loadKML(file){
         $.ajax({url:file,dataType:'xml',success:function(data){
-            docInfo = $(data).find('Document')[0];
-            loadStyles(docInfo);
-			loadInfos(docInfo);
-			showImage();
+            loadImage($(data).find('Document')[0]);
         }});
     }
+	
+	function loadImage(docInfo){
+		var mapInfo = {styles:[],markers:[],paths:[],zoom:1};
+
+		mapInfo.styles = loadStyles(docInfo);
+		loadInfos(docInfo,mapInfo.markers,mapInfo.paths,mapInfo.styles);
+		if(fixBounds!=null){
+			bounds = fixBounds;
+		}
+		mapInfo.zoom = findZoom();
+		showImage(mapInfo);
+	}
 
 	function loadStyles(docInfo){
 		var stylesXml = $(docInfo).find('Style');
+		var tab = [];
 		for(var i = 0 ; i <stylesXml.length ; i++){
 			var style = stylesXml[i];
 			var id = "#" + style.getAttribute("id");
 			var icon = extractValue($(style),'IconStyle > Icon > href');
 			if(icon!=null){
-				styles[id] = {icon:icon};
+				tab[id] = {icon:icon};
 			}else{
 				var lineStyle = $(style).find('LineStyle');
 				if(lineStyle.length > 0){
 					var ls = $(lineStyle[0]);
-					styles[id] = {color:convertColor(extractValue(ls,'color')),width:extractValue(ls,'width')};
+					tab[id] = {color:Utils.convertColor(extractValue(ls,'color')),width:extractValue(ls,'width')};
 				}				
 			}
 		}
+		return tab;
 	}
 	
-	var colorReg = new RegExp(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
-	/* Converti une couleur BGR en RGB */
-	function convertColor(color){
-		return color.replace(colorReg,'$4$3$2')
+	var Utils = {
+		colorReg:new RegExp(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i),
+		pas:100000,
+		convertColor:function(color){
+			return color.replace(this.colorReg,'$4$3$2');
+		},
+		round:function(value){
+			return Math.round(parseFloat(value) * this.pas) / this.pas;
+		}
 	}
 
-    function round(value){
-        return Math.round(parseFloat(value) * 100000) / 100000;
-    }
-
-     function loadInfos(data){
+     function loadInfos(data,markers,paths,styles){
          var points = $(data).find('Placemark');
          for(var i = 0 ; i < points.length ; i++){
 		     var styleId = extractValue($(points[i]),'styleUrl');
@@ -67,8 +76,8 @@
              var point = extractValue($(points[i]),'Point > coordinates');
 			 if(point != null){
 				 var p = point.split(",");
-				 var x = round(p[0]);
-				 var y = round(p[1]);
+				 var x = Utils.round(p[0]);
+				 var y = Utils.round(p[1]);
 				 updateBounds(x,y);
 				 markers.push({x:x,y:y,style:styles[styleId],name:name});
 			 }else{
@@ -77,13 +86,13 @@
 					var coords = line.split(" ");	
 					var pointsLine = coords.map(function(c){
                         if(c!=null && c.length >5){
-                            var pointLine = {lng:round(c.split(",")[0]),lat:round(c.split(",")[1])};
+							var p = c.split(",");
+                            var pointLine = {lng:Utils.round(p[0]),lat:Utils.round(p[1])};
                             updateBounds(pointLine.lng,pointLine.lat,c);
                             return pointLine;
                         }
 					});
-					paths.push({points:pointsLine,style:styles[styleId],name:name});
-					
+					paths.push({points:pointsLine,style:styles[styleId],name:name});					
 				}
 			 }
          };		
@@ -126,93 +135,68 @@
         var deltaLat = (lat - upBounds.lat())/256*(size.window);
 
         return {lat:deltaLat,lng:deltaLng};
-
     }
 	
+	/* Find correct zoom */
 	function findZoom(){
+		var pMin = map.getProjection().fromLatLngToPoint(new google.maps.LatLng(bounds.minX,bounds.minY));
+		var pMax = map.getProjection().fromLatLngToPoint(new google.maps.LatLng(bounds.maxX,bounds.maxY));
 		
+		var zoomX = Math.log(size.width / Math.abs(pMax.x - pMin.x)) / Math.log(2)-1;
+		var zoomY = Math.log(size.height / Math.abs(pMax.y - pMin.y)) / Math.log(2)-1;
+		
+		return Math.round(Math.min(zoomX,zoomY));
 	}
 	
-	function getSizeWindowInKm(){
-		/* largeur (longitude) fixe en angle / distance, mais pas en latitude (longueur non conservee) */
-		/* Les angles sont conserves */
-		var lat = GeoLoc.getDistanceLat(bounds.minY,bounds.maxY) / size.height;
-		var lng = GeoLoc.getDistanceLng(bounds.minX,bounds.maxX,bounds.minY) / size.width;
-		var max = Math.max(lat,lng);
-		var angle = GeoLoc.getAngleLat(max*size.window);
-		zoom = Math.round(Math.log(360/angle) / Math.log(2)) -1;
-	}
-	
-	 // http://www.maptiler.org/google-maps-coordinates-tile-bounds-projection/
-	 var GeoLoc = {
-		degreInKm:111.195,
-		rayon:6371,
-				
-		getAngleLat:function(distance){
-			return distance/this.degreInKm;
-		},
-				
-		getDistanceLat:function(latMin,latMax){
-			var angleLat = latMax - latMin;
-			return angleLat*this.degreInKm;
-		},
-		getDistanceLng:function(lngMin,lngMax,lat){
-			var circle = this.getCircleToLatitude(lat);
-			return ((lngMax - lngMin)/360) * circle;			
-		},
-		
-		getCircleToLatitude:function(latitude){
-			var adjustRayon = (Math.PI/2 - this.degreeToRad(latitude)) * this.rayon;
-			return adjustRayon * 2 * Math.PI;
-		},
-		degreeToRad : function(alpha){
-			return (alpha*Math.PI/180);
-		}
-	 }
+	 // http://www.maptiler.org/google-maps-coordinates-tile-bounds-projection/	
 	 
-	function createCanvas(){
-		$('body').append('<canvas id="canvas" height="' + realSize.height + '" width="' + realSize.width + '"></canvas>');
-		canvas = document.getElementById("canvas").getContext("2d");
+	function createCanvas(width,height){
+		$('body').append('<canvas id="canvas" height="' + height + '" width="' + width + '"></canvas>');
+		return document.getElementById("canvas").getContext("2d");
 	}
 	
 	var nbTotal = 0;
 	 
-    function showImage(){
-		getSizeWindowInKm();
-		
-		realSize.width = Math.ceil(size.width/size.window)*size.window;
-		realSize.height = Math.ceil(size.height/size.window)*size.window;
-		
-		createCanvas();
-		
-		var tot = 0;
-    	var currentPoint = {lat:bounds.maxY,lng:bounds.minX};
+    function showImage(mapInfo){		
 		size.maxJ = Math.ceil(size.height/size.window);
-		size.maxI = Math.ceil(size.width/size.window) -1;
-		for(var j = Math.ceil(size.height/size.window) ; j>=0 ;j--){
+		size.maxI = Math.ceil(size.width/size.window);
+		
+		realSize.width = size.maxI*size.window;
+		realSize.height = size.maxJ*(size.window - logoShift);
+				
+		var canvas = createCanvas(realSize.width,realSize.height);
+		
+		var tot = 0;var max = 0;
+    	var currentPoint = {lat:bounds.maxY,lng:bounds.minX};
+		
+		for(var j = size.maxJ ; j>=0 ;j--){
 			currentPoint.lng = bounds.minX;
-			var delta = findBounds(currentPoint.lat,currentPoint.lng,zoom);
-			for(var i = 0 ; i < Math.ceil(size.width/size.window);i++){            				
-				var bds = {minY:parseFloat(currentPoint.lat.toFixed(3)),minX:parseFloat(currentPoint.lng.toFixed(3)),
-					maxY:parseFloat((currentPoint.lat+delta.lat).toFixed(3)),maxX:parseFloat((currentPoint.lng + delta.lng).toFixed(3))};
+			var delta = findBounds(currentPoint.lat,currentPoint.lng,mapInfo.zoom);
+			for(var i = 0 ; i <= size.maxI;i++){            				
+				var bds = {minY:currentPoint.lat,minX:currentPoint.lng,
+					maxY:(currentPoint.lat+delta.lat),maxX:(currentPoint.lng + delta.lng)};				
 				currentPoint.lng+=delta.lng;				
-				var url = buildPartial(bds,i,j);
+				var url = buildPartial(bds,i,j,mapInfo);
 				if(url!=null){
                     nbTotal++;
                     tot+=url.length;
-					addImgToCanvas(i,j,url);
+					max = Math.max(max,url.length);
+					addImgToCanvas(i,j,url,canvas);
 				}
             }
+			// Shift actuel latitude with compute delta (local to a tile)
 			currentPoint.lat-=delta.lat;
-			$('body').append('<br/>');
+			if(debug){
+				$('body').append('<br/>');
+			}
         }
-        console.log("moy : " + (tot/nbTotal));
+        console.log("moy : " + (tot/nbTotal) + ", max : " + max + " , zoom " + mapInfo.zoom);
     }
 
 	var nbLoaded = 0;
 	var images = [];
 		
-	function addImgToCanvas(i,j,url){
+	function addImgToCanvas(i,j,url,canvas){
 		if(debug){
 			$('body').append('<img src="' + url + '" style="border:solid 1px black;width:' + size.window + 'px;style:' + size.window + 'px;margin-top:-5px"/>');					
 		}else{
@@ -220,17 +204,15 @@
 			img.src = url;
 			img.onload = function(){
 				images[i+"-"+j] = img;
-				nbLoaded++;
-				if(nbLoaded == nbTotal){
-					finalDraw();
+				if(++nbLoaded == nbTotal){
+					finalDraw(canvas);
 				}
 			};
 		}
-
 	}
 	
 	/* Draw the map */
-	function finalDraw(){
+	function finalDraw(canvas){
 		for(var j = size.maxJ ; j >=0  ; j--){
 			for(var i = 0 ; i <= size.maxI ; i++){
 				canvas.drawImage(images[i+"-"+j], i*size.window, realSize.height - j*(size.window - logoShift), size.window, size.window);
@@ -238,15 +220,15 @@
 		}	
 	}
 	
-    function buildPartial(bds,i,j){
-        var url = "http://maps.googleapis.com/maps/api/staticmap?size=" + size.window + "x" + size.window + "&maptype=roadmap&sensor=true&key=" + key;
-        url+="&zoom=" + zoom + "&center=" + ((bds.minY +bds.maxY)/2)+ "," + ((bds.minX +bds.maxX)/2);
-        url+=buildMarkers(bds);
-		url+=buildLines(bds,i,j);
+    function buildPartial(bds,i,j,mapInfo){
+        var url = ROOT_URL + "&size=" + size.window + "x" + size.window + "&maptype=roadmap&sensor=true";
+        url+="&zoom=" + mapInfo.zoom + "&center=" + ((bds.minY +bds.maxY)/2)+ "," + ((bds.minX +bds.maxX)/2);
+        url+=buildMarkers(bds,mapInfo.markers);
+		url+=buildLines(bds,mapInfo.paths,i,j);
         return url;
     }
 
-    function buildMarkers(bds){
+    function buildMarkers(bds,markers){
 		if(markers.length > 0){
 			var url = "";
             // Element distant of 10 px
@@ -270,7 +252,7 @@
         return "";
     }
 
-	function buildLines(bds,i,j){
+	function buildLines(bds,paths,i,j){
 		var url = "";
 		if(paths.length > 0){
 			var pas = ((bds.maxX - bds.minX)/size.window) * 20;
@@ -282,7 +264,6 @@
 					if(p == null){return;}
 					// Verify if point is enough distant
 					if(p!=null && p.lat >= (bds.minY-pas) && p.lat < (bds.maxY +pas) && p.lng > (bds.minX -pas) && p.lng < (bds.maxX + pas)){
-						//console.log("IN",p);
 						if(lastPoint == null || 
 							( Math.sqrt(Math.pow(lastPoint.lng - p.lng,2) + Math.pow(lastPoint.lat - p.lat,2)) > pas)){								
 								if(lastHiddenPoint!=null){
@@ -293,12 +274,11 @@
 						}
 						lastHiddenPoint = null;
 					}else{	
-						//console.log("OUT",p);
 						if(lastHiddenPoint == null && lastPoint == null){
 							lastHiddenPoint = p;
 						}else{
 							var tempPoint = lastHiddenPoint || lastPoint;
-							if(p!=null && droiteIsInPlan({x:tempPoint.lng,y:tempPoint.lat},{x:p.lng,y:p.lat},bds)){								
+							if(p!=null && lineIsInPlan({x:tempPoint.lng,y:tempPoint.lat},{x:p.lng,y:p.lat},bds)){								
 								// Si traverse image, on affiche les deux points, sinon, sortie de trait, on affiche pas le point
 								// (deja ecrit)
 								if(lastHiddenPoint!=null){
@@ -316,16 +296,17 @@
 				if(pointsToDraw.length > 0){				
 					var style = (path.style!=null)?("color:0x" + path.style.color + "ff|weight:" + path.style.width):"color:black|weight:2";
 					url+="&path=" + style;
-					pointsToDraw.forEach(function(p){
-						url+="|" + p.lat + "," + p.lng;
-					});
+					// Encode path to have shorter string
+					var points = pointsToDraw.map(function(p){return new google.maps.LatLng(p.lat,p.lng);});
+					var encode = google.maps.geometry.encoding.encodePath(points);
+					url+="|enc:" + encode;					
 				}
 			});
 		}
 		return url;
 	}
 
-	function droiteIsInPlan(pA,pB,bds){
+	function lineIsInPlan(pA,pB,bds){
 		if((pA.x > bds.minX && pB.x < bds.minX) || (pA.x < bds.minX && pB.x > bds.minX) ||
 		(pA.y > bds.minY && pB.y < bds.minY) || (pA.y < bds.minY && pB.y > bds.minY)){
 		
@@ -367,8 +348,8 @@
 	$(function(){
 		map = new google.maps.Map($('#map').get(0),{zoom:8,center:new google.maps.LatLng(0,0)});
 		google.maps.event.addListener(map, 'projection_changed', function(){
-			//loadKML("resources/norvege.kml");
-			loadKML("resources/export.kml");
+			loadKML("resources/norvege.kml");
+			//loadKML("resources/export.kml");
 		});
 	});
 
