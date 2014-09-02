@@ -14,18 +14,65 @@
 	var projection;
     var key = "AIzaSyCf0e7TC34X6EzkpsvtKyuqebjiosrzwak";
 	var ROOT_URL = "http://maps.googleapis.com/maps/api/staticmap?key=" + key;
-    //var size = {width:1400,height:2000,window:256};
-	//var realSize = $.extend({},size);
-    //var logoShift = 25;	// To avoid google logo display
-	//var fixBounds = {minX:12.5,maxX:15.5,minY:66.7,maxY:69.3};
+    //var fixBounds = {minX:12.5,maxX:15.5,minY:66.7,maxY:69.3};
 	
+	/* Calque prenant les actions de la souris */
+	var ActionLayer = {
+		canvas:null,
+		context:null,
+		firstPoint:null,
+		init:function(width,height){
+			if(this.canvas!=null){
+				this.canvas.remove();
+			}
+			$('body').append('<canvas height="' + height + '" width="' + width + '" style="position:absolute;left:10px" id="actionCanvas"></canvas>');
+			this.canvas = $('#actionCanvas');
+			this.context = this.canvas.get(0).getContext("2d");
+			this.canvas.bind('mousedown',function(e){
+				ActionLayer.firstPoint = ActionLayer.getPosition(e);
+			});
+			this.canvas.bind('mouseup',function(e){
+				ActionLayer.context.clearRect(0,0,width,height);
+				var pos = ActionLayer.getPosition(e);
+				ActionLayer.reloadMap(ActionLayer.firstPoint,pos);				
+				ActionLayer.firstPoint = null;
+			});
+			this.canvas.bind('mousemove',function(e){
+				if(ActionLayer.firstPoint == null){return;}
+				ActionLayer.context.clearRect(0,0,width,height);
+				ActionLayer.context.strokeStyle="red";
+				ActionLayer.context.lineWidth=3;
+				var pos = ActionLayer.getPosition(e);
+				var w = pos.x - ActionLayer.firstPoint.x;
+				var h = pos.y - ActionLayer.firstPoint.y;
+				ActionLayer.context.strokeRect(ActionLayer.firstPoint.x,ActionLayer.firstPoint.y,w,h);
+			});
+			
+		},
+		getPosition:function(e){
+			var x = e.clientX - this.canvas.offset().left;
+			var y = e.clientY - this.canvas.offset().top + $('html').scrollTop();
+			return {x:x,y:y};
+		},
+		reloadMap:function(pA,pB){
+			var bounds = {minX:Math.min(pA.x,pB.x),maxX:Math.max(pA.x,pB.x),minY:Math.min(pA.y,pB.y),maxY:Math.max(pA.y,pB.y)};
+			// Cherche les coordonnees qui dependent des coordonnees
+			var p1 = ImageBuilder.getMapCoordinates(bounds.minX,bounds.minY);
+			var p2 = ImageBuilder.getMapCoordinates(bounds.maxX,bounds.maxY);
+			bounds = {minX:p1.lng(),maxX:p2.lng(),minY:p1.lat(),maxY:p2.lat()};
+			console.log(bounds);
+			ImageBuilder.create($('#idUrl').val(),{width:parseInt($('#idWidth').val()),height:parseInt($('#idHeight').val())},bounds);
+		}
+
+	}
+		
 	var ImageBuilder = {
 		styles:[],
 		bounds:{},
 		markers:[],
 		paths:[],
 		zoom:1,
-		logoShift:25,
+		logoShift:25,	// To avoid google logo display
 		window:256,
 		images:[],
 		nbTotal:0,	// Images to load
@@ -48,7 +95,8 @@
 					success:function(data){
 						ImageBuilder.loadImage($(data).find('Document')[0],fixBounds,size);
 					},
-					error:function(){
+					error:function(a,b,c){
+						console.log(a,b,c);
 						alert("Impossible");
 					}});
 		},
@@ -60,7 +108,9 @@
 			}
 			this.zoom = this.findZoom(this.bounds,size);
 			this.showImage(size);
+			ActionLayer.init(size.realWidth,size.realHeight)
 		},
+		// Sauve le canvas pour le restorer ensuite
 		loadStyles:function(data){
 			var stylesXml = $(data).find('Style');
 			var styles = [];
@@ -118,6 +168,14 @@
 			bounds.maxX = Math.max(bounds.maxX,x);
 			bounds.maxY = Math.max(bounds.maxY,y);
 		},
+		/* Renvoie lat/lng d'un point situe sur la carte clique avec la souris */
+		getMapCoordinates:function(x,y){
+		console.log(x,y);
+			// On calcule le decalage de la carte (bounds.minX,bounds.maxY)
+			var shift = projection.fromLatLngToPoint(new google.maps.LatLng(this.bounds.maxY,this.bounds.minX));
+			var point = new google.maps.Point(shift.x+x/Math.pow(2,this.zoom-1),shift.y + y/Math.pow(2,this.zoom-1));
+			return projection.fromPointToLatLng(point);		
+		},
 		findBounds:function(lat,lng,size,zoom){
 			// Get the first point (bottom of tile)
 			var downPoint = projection.fromLatLngToPoint(new google.maps.LatLng(lat,lng));
@@ -139,10 +197,12 @@
 			var zoomX = Math.log(size.width / Math.abs(pMax.x - pMin.x)) / Math.log(2)-1;
 			var zoomY = Math.log(size.height / Math.abs(pMax.y - pMin.y)) / Math.log(2)-1;
 			
-			return Math.round(Math.min(zoomX,zoomY));
+			return Math.min(22,Math.round(Math.min(zoomX,zoomY)));
 		},
-		createCanvas:function(width,height){
-			$('body').append('<canvas id="canvas" height="' + height + '" width="' + width + '"></canvas>');
+		getCanvas:function(width,height){
+			if($('canvas#canvas').length == 0){
+				$('body').append('<canvas id="canvas" height="' + height + '" width="' + width + '"></canvas>');
+			}
 			return document.getElementById("canvas").getContext("2d");
 		},
 		showImage:function(size){	
@@ -152,7 +212,7 @@
 			size.realWidth = size.maxI*this.window;
 			size.realHeight = size.maxJ*(this.window - this.logoShift);
 					
-			var canvas = this.createCanvas(size.realWidth,size.realHeight);
+			var canvas = this.getCanvas(size.realWidth,size.realHeight);
 			var tot = 0;var max = 0;
 			var currentPoint = {lat:this.bounds.maxY,lng:this.bounds.minX};
 			
@@ -177,7 +237,7 @@
 					$('body').append('<br/>');
 				}
 			}
-			console.log("moy : " + (tot/this.nbTotal) + ", max : " + max + " , zoom " + this.zoom);
+			console.log("moy : " + (tot/this.nbTotal) + ", max : " + max + " , zoom " + this.zoom + " " + this.bounds.minX + "," + this.bounds.maxX + ":" + this.bounds.minY + "," + this.bounds.maxY);
 		},
 		addImgToCanvas:function(i,j,url,canvas,size){
 			if(debug){
@@ -350,7 +410,6 @@
 		google.maps.event.addListener(map, 'projection_changed', function(){
 			projection = map.getProjection();
 			init();
-			//ImageBuilder.create('resources/norvege.kml',{width:1400,height:2000});//,{minX:12.5,maxX:15.5,minY:66.7,maxY:69.3});
 		});
 	});
 	
