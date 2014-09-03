@@ -170,10 +170,10 @@
 		},
 		/* Renvoie lat/lng d'un point situe sur la carte clique avec la souris */
 		getMapCoordinates:function(x,y){
-		console.log(x,y);
 			// On calcule le decalage de la carte (bounds.minX,bounds.maxY)
-			var shift = projection.fromLatLngToPoint(new google.maps.LatLng(this.bounds.maxY,this.bounds.minX));
-			var point = new google.maps.Point(shift.x+x/Math.pow(2,this.zoom-1),shift.y + y/Math.pow(2,this.zoom-1));
+			var shift = projection.fromLatLngToPoint(new google.maps.LatLng(this.bounds.realMaxY,this.bounds.minX));
+			var point = new google.maps.Point(shift.x+x/Math.pow(2,this.zoom),shift.y + y/Math.pow(2,this.zoom));
+			console.log(x,y,projection.fromPointToLatLng(point).lat());
 			return projection.fromPointToLatLng(point);		
 		},
 		findBounds:function(lat,lng,size,zoom){
@@ -215,10 +215,11 @@
 			var canvas = this.getCanvas(size.realWidth,size.realHeight);
 			var tot = 0;var max = 0;
 			var currentPoint = {lat:this.bounds.maxY,lng:this.bounds.minX};
-			
+			this.bounds.realMaxY = 0;
 			for(var j = size.maxJ ; j>=0 ;j--){
 				currentPoint.lng = this.bounds.minX;
 				var delta = this.findBounds(currentPoint.lat,currentPoint.lng,size,this.zoom);
+				this.bounds.realMaxY = Math.max(this.bounds.realMaxY,currentPoint.lat+delta.lat);
 				for(var i = 0 ; i <= size.maxI;i++){            				
 					var bds = {minY:currentPoint.lat,minX:currentPoint.lng,
 						maxY:(currentPoint.lat+delta.lat),maxX:(currentPoint.lng + delta.lng)};				
