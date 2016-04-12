@@ -60,7 +60,6 @@
 			var p1 = ImageBuilder.getMapCoordinates(bounds.minX,bounds.minY);
 			var p2 = ImageBuilder.getMapCoordinates(bounds.maxX,bounds.maxY);
 			bounds = {minX:p1.lng(),maxX:p2.lng(),minY:p1.lat(),maxY:p2.lat()};
-			console.log(bounds);
 			ImageBuilder.create($('#idUrl').val(),{width:parseInt($('#idWidth').val()),height:parseInt($('#idHeight').val())},bounds);
 		}
 
@@ -173,8 +172,9 @@
 			// On calcule le decalage de la carte (bounds.minX,bounds.maxY)
 			var shift = projection.fromLatLngToPoint(new google.maps.LatLng(this.bounds.realMaxY,this.bounds.minX));
 			var point = new google.maps.Point(shift.x+x/Math.pow(2,this.zoom),shift.y + y/Math.pow(2,this.zoom));
-			console.log(x,y,projection.fromPointToLatLng(point).lat());
-			return projection.fromPointToLatLng(point);		
+         var coord = projection.fromPointToLatLng(point);
+         console.log(x,y,coord.lat(),coord.lng(),shift);
+			return coord;
 		},
 		findBounds:function(lat,lng,size,zoom){
 			// Get the first point (bottom of tile)
@@ -191,13 +191,12 @@
 		},		
 		/* Find correct zoom */
 		findZoom:function(bounds,size){
-			var pMin = projection.fromLatLngToPoint(new google.maps.LatLng(bounds.minX,bounds.minY));
-			var pMax = projection.fromLatLngToPoint(new google.maps.LatLng(bounds.maxX,bounds.maxY));
+			var pMin = projection.fromLatLngToPoint(new google.maps.LatLng(bounds.minY,bounds.minX));
+			var pMax = projection.fromLatLngToPoint(new google.maps.LatLng(bounds.maxY,bounds.maxX));
 			
-			var zoomX = Math.log(size.width / Math.abs(pMax.x - pMin.x)) / Math.log(2)-1;
+			var zoomX = Math.log(size.width / Math.abs(pMax.x - pMin.x)) / Math.log(2);
 			var zoomY = Math.log(size.height / Math.abs(pMax.y - pMin.y)) / Math.log(2)-1;
-			
-			return Math.min(22,Math.round(Math.min(zoomX,zoomY)));
+         return Math.min(22,Math.round(Math.min(zoomX,zoomY)));
 		},
 		getCanvas:function(width,height){
 			if($('canvas#canvas').length == 0){
@@ -222,10 +221,15 @@
 				this.bounds.realMaxY = Math.max(this.bounds.realMaxY,currentPoint.lat+delta.lat);
 				for(var i = 0 ; i <= size.maxI;i++){            				
 					var bds = {minY:currentPoint.lat,minX:currentPoint.lng,
-						maxY:(currentPoint.lat+delta.lat),maxX:(currentPoint.lng + delta.lng)};				
+						maxY:(currentPoint.lat+delta.lat),maxX:(currentPoint.lng + delta.lng)};
+                  if (i == 0 && j == size.maxJ){
+                     console.log(bds)
+                     console.log(delta)
+                  }
 					currentPoint.lng+=delta.lng;				
 					var url = this.buildPartial(bds,i,j);
-					if(url!=null){
+               //console.log(url)
+               if(url!=null){
 						this.nbTotal++;
 						tot+=url.length;
 						max = Math.max(max,url.length);
