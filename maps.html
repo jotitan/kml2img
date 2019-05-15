@@ -22,6 +22,7 @@
 		context:null,
 		firstPoint:null,
 		init:function(width,height){
+			return;
 			if(this.canvas!=null){
 				this.canvas.remove();
 			}
@@ -87,7 +88,7 @@
 			$('#canvas').remove();
 		},
 		create:function(url,size,fixBounds){
-			this.reset();
+         this.reset();
 			$.ajax(
 				{
 					url:url,dataType:'xml',
@@ -96,7 +97,7 @@
 					},
 					error:function(a,b,c){
 						console.log(a,b,c);
-						alert("Impossible");
+						alert("Impossible " + a + " " + b + " " + c);
 					}});
 		},
 		loadImage:function(data,fixBounds,size){
@@ -215,6 +216,7 @@
 			var tot = 0;var max = 0;
 			var currentPoint = {lat:this.bounds.maxY,lng:this.bounds.minX};
 			this.bounds.realMaxY = 0;
+			
 			for(var j = size.maxJ ; j>=0 ;j--){
 				currentPoint.lng = this.bounds.minX;
 				var delta = this.findBounds(currentPoint.lat,currentPoint.lng,size,this.zoom);
@@ -227,8 +229,8 @@
                      console.log(delta)
                   }
 					currentPoint.lng+=delta.lng;				
-					var url = this.buildPartial(bds,i,j);
-               //console.log(url)
+					var url = this.buildPartial(bds,i,j);					
+               
                if(url!=null){
 						this.nbTotal++;
 						tot+=url.length;
@@ -242,7 +244,7 @@
 					$('body').append('<br/>');
 				}
 			}
-			console.log("moy : " + (tot/this.nbTotal) + ", max : " + max + " , zoom " + this.zoom + " " + this.bounds.minX + "," + this.bounds.maxX + ":" + this.bounds.minY + "," + this.bounds.maxY);
+			console.log(this.nbTotal + "=> moy : " + (tot/this.nbTotal) + ", max : " + max + " , zoom " + this.zoom + " " + this.bounds.minX + "," + this.bounds.maxX + ":" + this.bounds.minY + "," + this.bounds.maxY);
 		},
 		addImgToCanvas:function(i,j,url,canvas,size){
 			if(debug){
@@ -252,8 +254,13 @@
 				img.src = url;
 				img.onload = function(){
 					ImageBuilder.images[i+"-"+j] = img;
+					if(ImageBuilder.nbLoaded%100 == 0){
+						console.log("Already load " + ImageBuilder.nbLoaded)
+					}
 					if(++ImageBuilder.nbLoaded == ImageBuilder.nbTotal){
+						console.log("CREATE FINAL");
 						ImageBuilder.finalDraw(canvas,size);
+						console.log("IMAGE DONE");
 					}
 				};
 			}
